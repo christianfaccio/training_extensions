@@ -14,6 +14,8 @@ from datumaro.experimental import Dataset
 
 from otx.data.dataset.base import OTXDataset, _default_collate_fn
 from otx.data.entity.sample import OTXSample, OTXSampleBatch
+from otx.types import OTXTaskType
+from otx.types.label import LabelInfo
 
 
 class TestDefaultCollateFn:
@@ -264,3 +266,75 @@ class TestOTXDataset:
         assert isinstance(collate, partial)
         assert collate.func is _default_collate_fn
         assert collate.keywords.get("stack_images") is True
+
+    def test_repr_default(self):
+        """Test `__repr__` function with default config."""
+        dataset = OTXDataset(dm_subset=self.mock_dm_subset, transforms=self.mock_transforms)
+
+        assert repr(dataset) == "OTXDataset(num_samples=100, task_type=None, num_classes=0)"
+
+    def test_repr_with_label_info(self):
+        """Test `__repr__` function with real label info."""
+        dataset = OTXDataset(dm_subset=self.mock_dm_subset, transforms=self.mock_transforms)
+
+        dataset.label_info = LabelInfo(
+            label_names=["cat", "dog"],
+            label_groups=[["cat", "dog"]],
+            label_ids=["0", "1"],
+        )
+
+        assert repr(dataset) == "OTXDataset(num_samples=100, task_type=None, num_classes=2)"
+
+    def test_repr_uses_subclass_name(self):
+        """Verifies that `type(self).__name__` works correctly for subclasses."""
+
+        class FakeDataset(OTXDataset):
+            def get_idx_list_per_classes(self, use_string_label=False) -> dict:
+                return {}
+
+            @property
+            def task_type(self) -> OTXTaskType:
+                return OTXTaskType.DETECTION
+
+        dataset = FakeDataset(dm_subset=self.mock_dm_subset, transforms=self.mock_transforms)
+
+        assert "FakeDataset" in repr(dataset)
+
+    def test_describe_basic(self):
+        """Test `describe()` function without transforms."""
+        dataset = OTXDataset(dm_subset=self.mock_dm_subset, transforms=None)
+        result = dataset.describe()
+
+        assert isinstance(result, dict)
+        assert result["num_samples"] == 100
+        assert result["task_type"] is None
+        assert result["num_classes"] == 0
+        assert not result["has_transforms"]
+        assert result["stack_images"]
+        assert "class_distribution" not in result
+
+    def test_describe_with_transform(self):
+        """Test `describe()` function with mock transforms."""
+        dataset = OTXDataset(dm_subset=self.mock_dm_subset, transforms=self.mock_transforms)
+        result = dataset.describe()
+
+        assert isinstance(result, dict)
+        assert result["num_samples"] == 100
+        assert result["task_type"] is None
+        assert result["num_classes"] == 0
+        assert result["has_transforms"]
+        assert result["stack_images"]
+        assert "class_distribution" not in result
+
+    def test_describe_with_class_distribution(self):
+        """Test `describe()` with class distribution enabled."""
+        dataset = OTXDataset(dm_subset=self.mock_dm_subset, transforms=None)
+
+        with patch.object(
+            dataset,
+            "get_idx_list_per_classes",
+            return_value={"cat": [0, 1, 2], "dog": [3, 4]},
+        ):
+            result = dataset.describe(include_class_distribution=True)
+
+        assert result["class_distribution"] == {"cat": 3, "dog": 2}

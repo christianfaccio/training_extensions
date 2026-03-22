@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import abc
 from functools import partial
-from typing import TYPE_CHECKING, Callable, Iterable, List, Union
+from typing import TYPE_CHECKING, Any, Callable, Iterable, List, Union
 
 import torch
 from torch.utils.data import Dataset as TorchDataset
@@ -149,6 +149,40 @@ class OTXDataset(TorchDataset):
 
     def __len__(self) -> int:
         return len(self.dm_subset)
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}("
+            f"num_samples={len(self)}, "
+            f"task_type={self.task_type.value if self.task_type is not None else None}, "
+            f"num_classes={self.label_info.num_classes})"
+        )
+
+    def describe(self, include_class_distribution: bool = False) -> dict[str, Any]:
+        """Return a summary of the dataset.
+
+        Args:
+            include_class_distribution: If True, include per-class sample counts
+
+        Returns:
+            A dictionary containing dataset summary information.
+        """
+        summary = {
+            "class_name": type(self).__name__,
+            "num_samples": len(self),
+            "task_type": self.task_type.value if self.task_type is not None else None,
+            "num_classes": self.label_info.num_classes,
+            "label_names": list(self.label_info.label_names),
+            "has_transforms": self.transforms is not None,
+            "stack_images": self.stack_images,
+        }
+
+        if include_class_distribution:
+            summary["class_distribution"] = {
+                k: len(v) for k, v in self.get_idx_list_per_classes(use_string_label=True).items()
+            }
+
+        return summary
 
     def _apply_transforms(self, entity: OTXSample) -> OTXSample | None:
         # Intensity mapping: convert raw pixels to float32 [0, 1].
